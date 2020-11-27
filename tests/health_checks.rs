@@ -2,10 +2,10 @@
 
 use std::net::TcpListener;
 
-use zero2prod::startup;
-use zero2prod::configuration::{get_configuration, DatabaseSettings};
-use sqlx::{PgPool, PgConnection, Connection, Executor};
+use sqlx::{Connection, Executor, PgConnection, PgPool};
 use uuid::Uuid;
+use zero2prod::configuration::{get_configuration, DatabaseSettings};
+use zero2prod::startup;
 
 // `actix_rt::test` is the testing equivalent of `actix_rt::main`.
 // It also spares you from having to specify the `#[test] attribute.
@@ -60,7 +60,7 @@ async fn subscribe_returns_a_200_for_valid_form_data() {
     // Assert
     assert_eq!(200, response.status().as_u16());
 
-    let saved = sqlx::query!("SELECT email, name FROM subscriptions", )
+    let saved = sqlx::query!("SELECT email, name FROM subscriptions",)
         .fetch_one(&app.db_pool)
         .await
         .expect("Failed to fetch saved subscription.");
@@ -77,7 +77,7 @@ async fn subscribe_return_a_400_when_data_is_missing() {
     let test_cases = vec![
         ("name=lebron%20james", "missing the email"),
         ("email=nba_lebron_james%40gmail.com", "missing the name"),
-        ("", "missing both name and email")
+        ("", "missing both name and email"),
     ];
 
     for (invalid_body, error_message) in test_cases {
