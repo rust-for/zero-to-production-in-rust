@@ -1,4 +1,4 @@
-// tests/health_checks
+//! tests/health_checks
 
 use std::net::TcpListener;
 
@@ -6,34 +6,43 @@ use sqlx::{Connection, Executor, PgConnection, PgPool};
 use uuid::Uuid;
 use zero2prod::configuration::{get_configuration, DatabaseSettings};
 use zero2prod::startup;
+use zero2prod::telemetry::{get_subscriber, init_subscriber};
+
+// Ensure that the `tracing` stack is only initialised once using `lazy_static`
+lazy_static::lazy_static! {
+    static ref TRACING: () = {
+        let fitler = if std::env::var("TEST_LOG").is_ok() { "debug" } else { "" };
+        let subscriber = get_subscriber("test".into(), fitler.into());
+        init_subscriber(subscriber);
+    };
+}
 
 // `actix_rt::test` is the testing equivalent of `actix_rt::main`.
 // It also spares you from having to specify the `#[test] attribute.
 // You can inspect what code gets generated using
 // `cargo expend --test health_check` (<- name of the test file)
-// #[actix_rt::test]
-// async fn health_check_succeeds() {
-//
-//     // Arrange
-//     let app = spawn_app().await;
-//
-//     // We brought `reqwest` in as a _development_ dependency
-//     // to perform HTTP requests against our application.
-//     // Either add it manually under [dev-dependencies] in Cargo.toml
-//     // or run `cargo add reqwest --dev`
-//     let client = reqwest::Client::new();
-//
-//     // Act
-//     let response = client
-//         .get(&format!("{}/health_check", &app.address))
-//         .send()
-//         .await
-//         .expect("Failed to execute request.");
-//
-//     // Assert
-//     assert!(response.status().is_success());
-//     assert_eq!(Some(0), response.content_length());
-// }
+#[actix_rt::test]
+async fn health_check_succeeds() {
+    // Arrange
+    let app = spawn_app().await;
+
+    // We brought `reqwest` in as a _development_ dependency
+    // to perform HTTP requests against our application.
+    // Either add it manually under [dev-dependencies] in Cargo.toml
+    // or run `cargo add reqwest --dev`
+    let client = reqwest::Client::new();
+
+    // Act
+    let response = client
+        .get(&format!("{}/health_check", &app.address))
+        .send()
+        .await
+        .expect("Failed to execute request.");
+
+    // Assert
+    assert!(response.status().is_success());
+    assert_eq!(Some(0), response.content_length());
+}
 
 #[actix_rt::test]
 async fn subscribe_returns_a_200_for_valid_form_data() {
@@ -104,6 +113,8 @@ pub struct TestApp {
 }
 
 async fn spawn_app() -> TestApp {
+    lazy_static::initialize(&TRACING);
+
     let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
     // We retrieve the port assigned to us by the OS
     let port = listener.local_addr().unwrap().port();
