@@ -4,7 +4,7 @@ use sqlx::PgPool;
 use tracing_futures::Instrument;
 use uuid::Uuid;
 use unicode_segmentation::UnicodeSegmentation;
-use crate::domain::{NewSubscriber, SubscriberName};
+use crate::domain::{NewSubscriber, SubscribeName};
 
 #[derive(serde::Deserialize)]
 pub struct FormData {
@@ -27,15 +27,11 @@ pub async fn subscribe(
 ) -> Result<HttpResponse, HttpResponse> {
     // `web::Form` is a wrapper around `FormData`
     // `form.0` gives us access to the underlying `FormData`
-    let name = SubscriberName::parse(form.0.name)
-        .map_err(|_| HttpResponse::BadRequest().finish())?;
-        // .expect("Name must validate.");
-
     let new_subscriber = NewSubscriber {
         email: form.0.email,
-        name,
+        name: SubscribeName::parse(form.0.name),
     };
-
+    // let subscriber_name = crate::domain::SubscribeName::parse(form.name.clone());
     insert_subscriber(&pool, &new_subscriber)
         .await
         .map_err(|_| HttpResponse::InternalServerError().finish())?;
@@ -68,3 +64,28 @@ pub async fn insert_subscriber(pool: &PgPool, new_subscriber: &NewSubscriber) ->
     Ok(())
 }
 
+/// Returns `true` if the input satisfies all our validation constraints
+/// on subscriber names, `false` otherwise.
+pub fn is_valid_name(s: &str) -> bool {
+    // `.trim()` returns a view over the input `s` without trailing
+    // whitespace-like characters.
+    // `.is_empty()` check if the view contains any character.
+    let is_empty_or_whitespace = s.trim().is_empty();
+
+    // A graphemes is defined by the Unicode standard as a "user-perceived"
+    // character: `å` is a single grapheme, but it is composed of two characters
+    // (`a` and `̊`).
+    //
+    // `graphemes` returns an iterator over the graphemes in the input `s`.
+    // `true` specifies that we want to use the extended graphemes definition set,
+    // the recommended one.
+    let is_too_long = s.graphemes(true).count() > 256;
+
+    // Iterate over all characters in the input `s` to check if any of them matches
+    // one of the characters in the forbidden array.
+    let forbidden_characters = ['/', '(', ')', '"', '<', '>', '\\', '{', '}'];
+    let contains_forbidden_characters = s.chars().any(|g| forbidden_characters.contains(&g));
+
+    // Return `false` if any of our conditions has been violated
+    !(is_empty_or_whitespace || is_too_long || contains_forbidden_characters)
+}
