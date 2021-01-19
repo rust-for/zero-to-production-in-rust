@@ -1,4 +1,4 @@
-//! tests/health_checks
+//! tests/health_checks.rs
 
 use std::net::TcpListener;
 
@@ -114,7 +114,10 @@ async fn subscribe_returns_a_400_when_fields_are_present_but_invalid() {
     let test_cases = vec![
         ("name=&email=lebron_james%40gmail.com", "empty name"),
         ("name=LebronJames&email=", "empty email"),
-        ("name=LebronJames&email=definitely-not-an-email", "invalid email"),
+        (
+            "name=LebronJames&email=definitely-not-an-email",
+            "invalid email",
+        ),
     ];
 
     for (invalid_body, description) in test_cases {

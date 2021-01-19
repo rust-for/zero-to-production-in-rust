@@ -35,7 +35,6 @@ impl SubscriberName {
         } else {
             Ok(Self(s))
         }
-
     }
 
     pub fn inner(self) -> String {

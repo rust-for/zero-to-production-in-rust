@@ -1,15 +1,31 @@
+//! src/routes/subscriptions.rs
+
+use std::convert::TryInto;
+
+use crate::domain::{NewSubscriber, SubscriberEmail, SubscriberName};
 use actix_web::{web, HttpResponse};
 use chrono::Utc;
 use sqlx::PgPool;
 use tracing_futures::Instrument;
-use uuid::Uuid;
 use unicode_segmentation::UnicodeSegmentation;
-use crate::domain::{NewSubscriber, SubscriberName};
+use uuid::Uuid;
 
 #[derive(serde::Deserialize)]
 pub struct FormData {
     email: String,
     name: String,
+}
+
+impl TryInto<NewSubscriber> for FormData {
+    type Error = String;
+
+    fn try_into(self) -> Result<NewSubscriber, Self::Error> {
+        // `web::Form` is a wrapper around `FormData`
+        // `form.0` gives us access to the underlying `FormData`
+        let name = SubscriberName::parse(self.name)?;
+        let email = SubscriberEmail::parse(self.email)?;
+        Ok(NewSubscriber { email, name })
+    }
 }
 
 #[tracing::instrument(
@@ -25,16 +41,10 @@ pub async fn subscribe(
     form: web::Form<FormData>,
     pool: web::Data<PgPool>,
 ) -> Result<HttpResponse, HttpResponse> {
-    // `web::Form` is a wrapper around `FormData`
-    // `form.0` gives us access to the underlying `FormData`
-    let name = SubscriberName::parse(form.0.name)
+    let new_subscriber = form
+        .0
+        .try_into()
         .map_err(|_| HttpResponse::BadRequest().finish())?;
-        // .expect("Name must validate.");
-
-    let new_subscriber = NewSubscriber {
-        email: form.0.email,
-        name,
-    };
 
     insert_subscriber(&pool, &new_subscriber)
         .await
@@ -47,15 +57,17 @@ pub async fn subscribe(
     name = "Saving new subscriber details in the database",
     skip(new_subscriber, pool)
 )]
-
-pub async fn insert_subscriber(pool: &PgPool, new_subscriber: &NewSubscriber) -> Result<(), sqlx::Error> {
+pub async fn insert_subscriber(
+    pool: &PgPool,
+    new_subscriber: &NewSubscriber,
+) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"
     INSERT INTO subscriptions (id, email, name, subscribed_at)
     VALUES ($1, $2, $3, $4)
             "#,
         Uuid::new_v4(),
-        new_subscriber.email,
+        new_subscriber.email.as_ref(),
         new_subscriber.name.as_ref(),
         Utc::now()
     )
@@ -67,4 +79,3 @@ pub async fn insert_subscriber(pool: &PgPool, new_subscriber: &NewSubscriber) ->
     })?;
     Ok(())
 }
-
